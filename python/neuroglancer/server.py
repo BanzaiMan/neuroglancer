@@ -171,6 +171,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)   
 
     def log_message(self, format, *args):
+        pass
         if debug:
             BaseHTTPRequestHandler.log_message(self, format, *args)
 
