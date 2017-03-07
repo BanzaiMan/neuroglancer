@@ -1,3 +1,4 @@
+from __future__ import print_function
 import json
 import base64
 
@@ -48,10 +49,10 @@ class Task(object):
                 'chunk_encoding': self.chunk_encoding,
                 'info_path': self.info_path
             })
-            payloadBase64 = base64.b64encode(payload)
+            payloadBase64 = base64.b64encode(bytes(payload,'utf-8'))
 
             self._body = {
-              "payloadBase64": payloadBase64,
+              "payloadBase64": payloadBase64.decode('utf-8'),
             }
 
         return self._body
@@ -119,7 +120,7 @@ class TaskQueue(object):
         Lists all non-deleted Tasks in a TaskQueue, 
         whether or not they are currently leased, up to a maximum of 100.
         """
-        print self.api.list(project=self._project, taskqueue=self._queue_name).execute()
+        return self.api.list(project=self._project, taskqueue=self._queue_name).execute()
 
 
     def update(self, task):
@@ -158,7 +159,6 @@ class TaskQueue(object):
 
     def delete(self, task):
         """Deletes a task from a TaskQueue."""
-        print task.body
         self.api.delete(
             project=self._project,
             taskqueue=self._queue_name,

@@ -26,10 +26,10 @@ class Storage(object):
         os.makedirs(self._local)
         self._n_objects = 0 
 
-        client = storage.Client \
+        self.client = storage.Client \
             .from_service_account_json('client-secret.json')
 
-        self._bucket = client.get_bucket(BUCKET_NAME)
+        self._bucket = self.client.get_bucket(BUCKET_NAME)
 
     def get_blob(self, name):
         return self._bucket.get_blob(name)
