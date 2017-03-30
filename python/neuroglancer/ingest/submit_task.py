@@ -11,7 +11,7 @@ from tqdm import tqdm
 from neuroglancer import downsample_scales, chunks
 from neuroglancer.ingest.base import Storage
 from neuroglancer.ingest.tasks import (TaskQueue, BigArrayTask, IngestTask,
-     HyperSquareTask, MeshTask, MeshManifestTask, DownsampleTask)
+     HyperSquareTask, MeshTask, MeshManifestTask, DownsampleTask, WatershedTask)
 from neuroglancer.ingest.volumes import HDF5Volume
 
 def create_ingest_task(dataset_name, layer_name):
@@ -324,4 +324,12 @@ if __name__ == '__main__':
     #                             layer_type="image",
     #                             resolution=[17,17,23])
     # create_ingest_task("e2198_v0","image")
-    pass
+
+
+    w = WatershedTask(chunk_position="0-1024_0-1024_0-100",
+                  crop_position="0-512_256-512_0-50",
+                  info_path_affinities="gs://neuroglancer/test_v1/affinities/info", 
+                  info_path_segmentation="gs://neuroglancer/test_v1/watershed/info",
+                  high_threshold=0.97, low_threshold=0.006821, merge_threshold=0.3, 
+                  merge_size=800, dust_size=100)
+    w.execute()

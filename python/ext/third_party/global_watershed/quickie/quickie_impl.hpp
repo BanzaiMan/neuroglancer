@@ -347,7 +347,7 @@ chunk_quickie_impl( const size_type      xsize,
 
     //toc("Sorting Graph Edges");
 
-    std::stable_sort( dendr.begin(), dendr.end(), edge_compare< value_type, id_type > );
+    std::stable_sort( dendr.begin(), dendr.end(), zi::watershed::edge_compare< value_type, id_type > );
 
     //toc("Preparing the Initial Dendrogram");
 
@@ -422,7 +422,6 @@ chunk_quickie_impl( const size_type      xsize,
             counts[ ids[x][y][zdim-1] ] |= on_border;
         }
     }
-
     counts[0] = 0;
 
     //toc("Going Down The Dendrogram For High/Size Thresholds");

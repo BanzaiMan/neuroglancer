@@ -34,7 +34,6 @@ volume_types::extent_gen extents;
 volume_types::index_gen  indices;
 
 boost::fortran_storage_order matlab_storage_order;
-
 }
 
 using   boost::multi_array_types::index_range;
@@ -62,7 +61,7 @@ public:
 
     template< typename ExtentList >
     volume_ref( T* data, const ExtentList& extents )
-        : super_type( data, extents, matlab_storage_order )
+        : super_type( data, extents )
     { }
 
     const T& at( index i ) const
@@ -99,7 +98,7 @@ public:
 
     template< typename ExtentList >
     const_volume_ref( const T* data, const ExtentList& extents )
-        : super_type( data, extents, matlab_storage_order )
+        : super_type( data, extents)
     { }
 
     const T& at( index i ) const

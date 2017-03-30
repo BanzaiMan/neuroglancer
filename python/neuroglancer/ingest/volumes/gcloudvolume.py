@@ -295,7 +295,7 @@ class GCloudVolume(Volume):
     offset = Vec(*offset)
 
     bounds = Bbox( offset, shape + offset)
-    bounds = Bbox.clamp(bounds, self.volume_size)
+    bounds = Bbox.clamp(bounds, Bbox.from_vec(self.volume_size))
     bounds = bounds.shrink_to_chunk_size( self.underlying )
 
     img_offset = bounds.minpt - offset
@@ -314,6 +314,8 @@ class GCloudVolume(Volume):
       if np.array_equal(spt, ept):
           continue
 
+      spt = spt.astype(int)
+      ept = ept.astype(int)
       filename = "{}-{}_{}-{}_{}-{}".format(
           spt.x, ept.x,
           spt.y, ept.y, 

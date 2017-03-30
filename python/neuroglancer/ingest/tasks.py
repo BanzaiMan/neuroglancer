@@ -7,6 +7,7 @@ import io
 import os
 import re
 from tempfile import NamedTemporaryFile
+import subprocess
 
 import h5py
 import blosc
@@ -536,7 +537,10 @@ class BigArrayTask(object):
             tmp.write(string)
             tmp.close()
             with h5py.File(tmp.name,'r') as h5:
-                return np.transpose(h5['img'][:], axes=(3,2,1,0))
+                return_value = np.transpose(h5['img'][:], axes=(3,2,1,0))
+                 
+        os.remove(tmp.name)
+        return return_value
 
     def _upload_chunk(self):
         if self.version == 'zfish_v0/affinities':
@@ -708,6 +712,145 @@ class HyperSquareTask(object):
             raise NotImplementedError(encoding)
 
 
+class WatershedTask(object):
+
+    def __init__(self, chunk_position=None, crop_position=None,
+                 info_path_affinities=None, info_path_segmentation=None,
+                 high_threshold=None, low_threshold=None, merge_threshold=None, 
+                 merge_size=None, dust_size=None, fromjson=None, _id=None):
+        self._id =  None
+        self.chunk_position = chunk_position
+        self.crop_position = crop_position
+        self.info_path_affinities = info_path_affinities
+        self.info_path_segmentation = info_path_segmentation
+        self.high_threshold = high_threshold
+        self.low_threshold = low_threshold
+        self.merge_threshold = merge_threshold
+        self.merge_size = merge_size
+        self.dust_size = dust_size
+        self.tag = 'watershed'
+        if fromjson:
+            self.payloadBase64 = fromjson
+            self._id = _id
+
+    @property
+    def payloadBase64(self):
+        payload = json.dumps({
+            'chunk_position': self.chunk_position,
+            'crop_position': self.crop_position,
+            'info_path_affinities': self.info_path_affinities,
+            'info_path_segmentation': self.info_path_segmentation,
+            'high_threshold': self.high_threshold,
+            'low_threshold': self.low_threshold,
+            'merge_threshold': self.merge_threshold,
+            'merge_size': self.merge_size,
+            'dust_size': self.dust_size
+        })
+        return base64.b64encode(payload)
+    
+    @payloadBase64.setter
+    def payloadBase64(self, payload):
+        decoded_string =  base64.b64decode(payload).encode('ascii')
+        d = json.loads(decoded_string)
+        self.chunk_position = d['chunk_position']
+        self.crop_position = d['crop_position']
+        self.info_path_affinities = d['info_path_affinities']
+        self.info_path_segmentation = d['info_path_segmentation']
+        self.high_threshold = d['high_threshold']
+        self.low_threshold = d['low_threshold']
+        self.merge_threshold = d['merge_threshold']
+        self.merge_size = d['merge_size']
+        self.dust_size = d['dust_size']
+
+    def __repr__(self):
+        return """WatershedTask(chunk_position='{}', crop_position='{}',
+                  info_path_affinities='{}',
+                  info_path_segmentation='{}',
+                  high_threshold={}, low_threshold={}, merge_threshold={}
+                  merge_size={}, dust_size={})""".format(
+                    self.chunk_position,
+                    self.crop_position,
+                    self.info_path_affinities,
+                    self.info_path_segmentation,
+                    self.high_threshold,
+                    self.low_threshold,
+                    self.merge_threshold,
+                    self.merge_size,
+                    self.dust_size)
+
+    def execute(self):
+        self._parse_chunk_position()
+        self._parse_crop_position()
+        self._parse_info_path()
+        self._download_input_chunk()
+        self._run_julia()
+        self._upload_chunk()
+
+    def _parse_chunk_position(self):
+        match = re.match(r'^(\d+)-(\d+)_(\d+)-(\d+)_(\d+)-(\d+)$', self.chunk_position)
+        (self._xmin, self._xmax,
+         self._ymin, self._ymax,
+         self._zmin, self._zmax) = map(int, match.groups())
+
+    def _parse_crop_position(self):
+        match = re.match(r'^(\d+)-(\d+)_(\d+)-(\d+)_(\d+)-(\d+)$', self.crop_position)
+        (self._cropxmin, self._cropxmax,
+         self._cropymin, self._cropymax,
+         self._cropzmin, self._cropzmax) = map(int, match.groups())
+
+    def _parse_info_path(self):
+        match = re.match(r'^.*/([^//]+)/([^//]+)/info$', self.info_path_affinities)
+        self._dataset_name_affinities, self._layer_name_affinities = match.groups()
+
+        match = re.match(r'^.*/([^//]+)/([^//]+)/info$', self.info_path_segmentation)
+        self._dataset_name_segmentation, self._layer_name_segmentation = match.groups()
+
+    def _download_input_chunk(self):
+        volume = GCloudVolume(self._dataset_name_affinities, self._layer_name_affinities, cache_files=True)
+        self._data = volume[self._xmin:self._xmax,
+                            self._ymin:self._ymax,
+                            self._zmin:self._zmax]
+
+        if self._data.dtype == np.uint8:
+            self._data = self._data.astype(np.float32) / 255.0
+
+    def _run_julia(self):
+        # Too lazy to write a julia wrapper
+        with NamedTemporaryFile(delete=True) as input_file:
+            with h5py.File(input_file.name,'w') as h5:
+                h5.create_dataset('main', data=self._data.transpose((3,2,1,0)))
+
+            with NamedTemporaryFile(delete=True) as output_file:
+            
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                subprocess.call(["julia",
+                             current_dir +"../../../ext/third_party/watershed/watershed.jl",
+                             input_file.name,
+                             output_file.name,
+                             str(self.high_threshold),
+                             str(self.low_threshold),
+                             str(self.merge_threshold),
+                             str(self.merge_size),
+                             str(self.dust_size)])
+
+                with h5py.File(output_file.name,'r') as h5:
+                    self._data = h5['main'][:].transpose((2,1,0))
+
+    def _upload_chunk(self):
+        print ('uploading')
+        volume = GCloudVolume(self._dataset_name_segmentation, self._layer_name_segmentation, cache_files=False)
+        print (self._data.shape)
+        crop_data = self._data[self._cropxmin:self._cropxmax,
+                               self._cropymin:self._cropymax,
+                               self._cropzmin:self._cropzmax]
+
+        print (crop_data.shape)
+        offset = (self._xmin+self._cropxmin, 
+                  self._ymin+self._cropymin,
+                  self._zmin+self._cropzmin)
+        print (offset)
+        volume.upload_image(crop_data, offset)
+
 class TaskQueue(object):
     """
     The standard usage is that a client calls lease to get the next available task,
@@ -818,7 +961,9 @@ class TaskQueue(object):
         elif task_json['tag'] == 'bigarray':
             return BigArrayTask(fromjson=task_json['payloadBase64'], _id=task_json['id'])    
         elif task_json['tag'] == 'hypersquare':
-            return HyperSquareTask(fromjson=task_json['payloadBase64'], _id=task_json['id'])  
+            return HyperSquareTask(fromjson=task_json['payloadBase64'], _id=task_json['id'])
+        elif task_json['tag'] == 'watershed':
+            return WatershedTask(fromjson=task_json['payloadBase64'], _id=task_json['id'])
         else:
             raise NotImplementedError
 

@@ -182,7 +182,7 @@ public:
         counts.clear();
     }
 
-    void process_chunk_borders( chunk_type c )
+    void process_chunk_borders( chunk_type c ) // it creates edges between chunks
     {
         const index x = c->xpos();
         const index y = c->ypos();
@@ -198,27 +198,27 @@ public:
         std::vector< id_type >    a0, b0, a1, b1;
 
         const value_type low_threshold  = super_type::low_threshold();
-        const value_type min_threshold  = super_type::dust_merge_threshold();
+        const value_type dust_merge_threshold  = super_type::dust_merge_threshold();
         const value_type high_threshold = super_type::high_threshold();
 
-        for ( int i = 0; i < 6; ++i )
+        for ( int i = 0; i < 6; ++i ) //itereate over every direction
         {
             if ( x+dx[i] >= 0 && y+dy[i] >= 0 && z+dz[i] >= 0 &&
                  x+dx[i] < static_cast<index>(super_type::xdim()) &&
                  y+dy[i] < static_cast<index>(super_type::ydim()) &&
-                 z+dz[i] < static_cast<index>(super_type::zdim()) )
+                 z+dz[i] < static_cast<index>(super_type::zdim()) ) //bound check we are inside the dataset
             {
 
                 chunk_type o = super_type::chunks_[x+dx[i]][y+dy[i]][z+dz[i]];
 
+                // get segmentation and affinities for the boder plane we are analizing
                 if ( i < 3 )
                 {
                     o->get_border_affinities( i, conn );
-                    c->get_seg_faces( i, 0, a0, a1 );
+                    c->get_seg_faces( i, 0, a0, a1 ); //a0 is the plane 
                     o->get_seg_faces( i, 1, b0, b1 );
                 }
-                else
-                {
+                else {
                     c->get_border_affinities( i-3, conn );
                     c->get_seg_faces( i-3, 1, a1, a0 );
                     o->get_seg_faces( i-3, 0, b1, b0 );
@@ -232,58 +232,50 @@ public:
 
                 for ( size_type idx = 0; idx < a0.size(); ++idx )
                 {
-                    if ( a0[idx] && b1[idx] )
+                    if ( !a0[idx] || !b1[idx] ){ continue; } // check the outers are not background
+                    bool needs_an_edge = false;
+                    id_pair xp( aoff+a0[idx], boff+b1[idx] ); // create a new pair with the outers, the inners are overlapping
+                    if ( conn[idx] >= low_threshold ) {
+                        needs_an_edge=true;
+                        if ( a1[idx] ) { //if a1[idx] is not black
+                            ZI_ASSERT(a0[idx]==a1[idx]); // it is true in practice but why?
+                            if ( conn[idx] >= high_threshold )
+                            {
+                                ZI_ASSERT(b0[idx]==b1[idx]); //because the affinity is higher than high threshold they will always be the same id
+                                needs_an_edge=false;
+                                if ( i < 3 ) {
+                                    same.insert(xp);
+                                }
+                            }
+                            else {
+                                ZI_ASSERT(merge_at_[xp.first]==high_threshold ||
+                                          merge_at_[xp.first]==conn[idx]); //Merge at was initialize at high_threshold for every id
+                                merge_at_[xp.first] = conn[idx]; // set the merging threhold for a given id, what if this id e
+                            }
+                        }
+                        else {
+                            ZI_ASSERT(b1[idx]||conn[idx]<high_threshold);
+                        }
+                    }
+                    else if ( conn[idx] >= dust_merge_threshold ) {
+                        needs_an_edge = true;
+                    }
+
+                    if ( needs_an_edge && ( i < 3 ) )
                     {
-                        bool needs_an_edge = false;
-                        id_pair xp( aoff+a0[idx], boff+b1[idx] );
-
-                        if ( conn[idx] >= low_threshold )
+                        typename edgemap_type::iterator it = edges.find( xp );
+                        if ( it == edges.end() )
                         {
-                            needs_an_edge=true;
-                            if ( a1[idx] )
-                            {
-                                ZI_ASSERT(a0[idx]==a1[idx]);
-                                if ( conn[idx] >= high_threshold )
-                                {
-                                    ZI_ASSERT(b0[idx]==b1[idx]);
-                                    needs_an_edge=false;
-                                    if ( i < 3 )
-                                    {
-                                        same.insert(xp);
-                                    }
-                                }
-                                else
-                                {
-                                    ZI_ASSERT(merge_at_[xp.first]==high_threshold ||
-                                              merge_at_[xp.first]==conn[idx]);
-                                    merge_at_[xp.first] = conn[idx];
-                                }
-                            }
-                            else
-                            {
-                                ZI_ASSERT(b1[idx]||conn[idx]<high_threshold);
-                            }
+                            ZI_ASSERT(conn[idx]<high_threshold);
+                            edges.insert( std::make_pair( xp, conn[ idx ] ));
                         }
-                        else if ( conn[idx] >= min_threshold )
+                        else if ( it->second < conn[ idx ] )
                         {
-                            needs_an_edge = true;
-                        }
-
-                        if ( needs_an_edge && ( i < 3 ) )
-                        {
-                            typename edgemap_type::iterator it = edges.find( xp );
-                            if ( it == edges.end() )
-                            {
-                                ZI_ASSERT(conn[idx]<high_threshold);
-                                edges.insert( std::make_pair( xp, conn[ idx ] ));
-                            }
-                            else if ( it->second < conn[ idx ] )
-                            {
-                                it->second = conn[ idx ];
-                            }
+                            it->second = conn[ idx ];
                         }
                     }
                 }
+                
             }
         }
 
@@ -384,6 +376,7 @@ public:
 
         detail::xxl_queue< edge_type, edge_less<value_type,id_type> > queue;
 
+        //merge all dendrograms
         for ( size_type i = 0; i < super_type::size(); ++i )
         {
             chunk_type c = super_type::chunks_.at( i );
@@ -391,10 +384,10 @@ public:
             queue.add_source( c->more_dendr().filename(), c->more_dendr().stored_size(), 0 );
         }
 
-        const value_type min_threshold  = super_type::dust_merge_threshold();
-        const value_type low_threshold  = super_type::low_threshold();
+        const value_type low_threshold = super_type::low_threshold();
         const value_type high_threshold = super_type::high_threshold();
         const count_type merge_threshold = super_type::merge_threshold();
+        const value_type dust_merge_threshold = super_type::dust_merge_threshold();
         const count_type dust_threshold = super_type::dust_threshold();
 
         while ( !queue.empty() )
@@ -404,29 +397,26 @@ public:
             const id_type v2  = sets_.find_set( zi::get< 1 >( queue.top() ) + off );
 
             ZI_ASSERT( v1 && v2 );
-            if ( v1 != v2 )
+            if ( v1 == v2 ) { continue; }
+            
+            const value_type& val = zi::get<2>(queue.top());
+            ZI_ASSERT(val<high_threshold);
+
+            if ( val < low_threshold ) { break; }
+
+            if ( merge_at_[v1] == val || merge_at_[v2] == val )
             {
-                const value_type& val = zi::get<2>(queue.top());
-                ZI_ASSERT(val<high_threshold);
-
-                if ( val < low_threshold )
+                const id_type vr = sets_.join( v1, v2 );
+                sizes_[ v1 ] += sizes_[ v2 ];
+                sizes_[ v2 ]  = 0;
+                std::swap( sizes_[ vr ], sizes_[ v1 ] );
+                merge_at_[vr] = std::max( merge_at_[v1], merge_at_[v2] );
+                if ( merge_at_[vr] != val )
                 {
-                    break;
-                }
-
-                if ( merge_at_[v1] == val || merge_at_[v2] == val )
-                {
-                    const id_type vr = sets_.join( v1, v2 );
-                    sizes_[ v1 ] += sizes_[ v2 ];
-                    sizes_[ v2 ]  = 0;
-                    std::swap( sizes_[ vr ], sizes_[ v1 ] );
-                    merge_at_[vr] = std::max( merge_at_[v1], merge_at_[v2] );
-                    if ( merge_at_[vr] != val )
-                    {
-                        merge_at_[vr] = high_threshold;
-                    }
+                    merge_at_[vr] = high_threshold;
                 }
             }
+            
 
             queue.pop();
         }
@@ -452,22 +442,15 @@ public:
             const value_type& val = zi::get< 2 >( queue.top() );
 
             ZI_ASSERT( v1 && v2 );
+            if ( val < dust_merge_threshold ) { break; }
 
-            if ( val < min_threshold )
-            {
-                break;
-            }
+            if ( v1 != v2 && 
+               ( sizes_[v1] < merge_threshold || sizes_[v2] < merge_threshold )) {
 
-            if ( v1 != v2 )
-            {
-
-                if ( sizes_[v1] < merge_threshold || sizes_[v2] < merge_threshold )
-                {
                     const id_type vr = sets_.join( v1, v2 );
                     sizes_[ v1 ] += sizes_[ v2 ];
                     sizes_[ v2 ]  = 0;
                     std::swap( sizes_[ vr ], sizes_[ v1 ] );
-                }
             }
 
             queue.pop();
@@ -489,14 +472,12 @@ public:
             {
                 ZI_ASSERT(sets_.find_set(i)==static_cast<id_type>(i));
 
-                if ( sizes_[ i ] >= dust_threshold )
-                {
+                if ( sizes_[ i ] >= dust_threshold ) {
                     sizes_[ new_index ] = sizes_[ i ];
                     reorder_[ i ] = new_index;
                     ++new_index;
                 }
-                else
-                {
+                else {
                     sizes_[ 0 ] += sizes_[ i ];
                     sizes_[ i ]  = reorder_[ i ] = 0;
                 }
