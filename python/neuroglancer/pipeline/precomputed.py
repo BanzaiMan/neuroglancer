@@ -15,7 +15,7 @@ class Precomputed(object):
     Chunk = namedtuple('Chunk',
         ['x_start','x_stop','y_start','y_stop','z_start','z_stop'])
 
-    def __init__(self, storage, scale_idx=0, fill=False, pad=None):
+    def __init__(self, storage, scale_idx=0, fill=False, pad=None, cache=False):
         """read/write numpy arrays to a layer.
 
         It usess the storage class to get and write files,
@@ -64,6 +64,11 @@ class Precomputed(object):
         self._scale = self.info['scales'][scale_idx]
         self.pad = pad
 
+        if cache:
+            self.get_file = lambda file_path, force_decompress: self._storage.get_file_cached(file_path, force_decompress)
+        else:
+            self.get_file = lambda file_path, force_decompress: self._storage.get_file(file_path, force_decompress)
+
         # Don't know how to handle more than one
         assert len(self._scale['chunk_sizes']) == 1
 
@@ -73,6 +78,8 @@ class Precomputed(object):
     def __getitem__(self, slices):
         """ It allows for non grid aligned slices
         """
+        if not self.pad:
+            self._validate_slice_bounds(slices)
         aligned_slices, crop_slices = self._align_slices(slices)
         return_volume = np.empty(
             shape=self._get_slices_shape(aligned_slices),
@@ -85,7 +92,8 @@ class Precomputed(object):
         for c in self._iter_chunks(aligned_slices):
 
             file_path = self._chunk_to_file_path(c)
-            content =  self._storage.get_file(file_path)
+            force_decompress = ('force_decompress' in self.info) and self.info['force_decompress']
+            content =  self.get_file(file_path, force_decompress = force_decompress)
             if not content and not self._fill:
                 raise EmptyVolumeException(file_path)
 
@@ -97,12 +105,46 @@ class Precomputed(object):
             return_volume[self._slices_from_chunk(c,offset)] = decoded
         return return_volume[crop_slices]
 
+    def __setitem_misaligned__(self, slices, input_volume):
+        """ It allows for non grid aligned slices
+        """
+        if not self.pad:
+            self._validate_slice_bounds(slices)
+        aligned_slices, crop_slices = self._align_slices(slices)
+        return_volume = np.empty(
+            shape=self._get_slices_shape(aligned_slices),
+            dtype=self.info['data_type'])
+
+        if self.pad is not None:
+            return_volume[:] = self.pad
+
+        offset =  self._get_offsets(aligned_slices)
+        for c in self._iter_chunks(aligned_slices):
+
+            file_path = self._chunk_to_file_path(c)
+            force_decompress = ('force_decompress' in self.info) and self.info['force_decompress']
+            content =  self.get_file(file_path, force_decompress = force_decompress)
+            if not content and not self._fill:
+                raise EmptyVolumeException(file_path)
+
+            decoded = chunks.decode(
+                content, 
+                encoding=self._scale['encoding'], 
+                shape=self._get_chunk_shape(c),
+                dtype=self.info['data_type'])
+            return_volume[self._slices_from_chunk(c,offset)] = decoded
+        return_volume[crop_slices]=input_volume
+        self.__setitem__(aligned_slices, return_volume)
+
     def __setitem__(self, slices, input_volume):
         """
         It purposely doesn't allow for non grid aligned slices.
         That is because the result of two workers writting
         to overlapping chunks would be hard to predict.
         """
+        assert self.pad is None
+        self._validate_slice_bounds(slices)
+        self._validate_slice_alignment(slices)
         offset =  self._get_offsets(slices)
         for c in self._iter_chunks(slices):
             input_chunk = input_volume[self._slices_from_chunk(c, offset)]
@@ -191,6 +233,38 @@ class Precomputed(object):
 
         return tuple(aligned_slices), tuple(crop_slices)
 
+    def _validate_slice_bounds(self, slices):
+        for slc_idx, slc in enumerate(slices):
+            voxel_offset = self._scale['voxel_offset'][slc_idx]
+            start = slc.start - voxel_offset
+            stop = slc.stop - voxel_offset
+            chunk_size = self._scale['chunk_sizes'][0][slc_idx]
+            layer_size = self._scale['size'][slc_idx]
+            if stop <= start:
+                raise ValueError(slc)
+            if self.pad is None:
+                if start < 0:
+                    raise ValueError(slc)
+                if stop > layer_size:
+                    raise ValueError("{} is larger than the dataset".format(slc.stop))
+
+    def _validate_slice_alignment(self, slices):
+        for slc_idx, slc in enumerate(slices):
+            voxel_offset = self._scale['voxel_offset'][slc_idx]
+            start = slc.start - voxel_offset
+            stop = slc.stop - voxel_offset
+            chunk_size = self._scale['chunk_sizes'][0][slc_idx]
+            layer_size = self._scale['size'][slc_idx]
+            if stop <= start:
+                raise ValueError(slc)
+
+            if start % chunk_size:
+                raise ValueError("{} is not grid aligned".format(slc.start))
+
+            if stop > layer_size or (stop < layer_size and stop % chunk_size):
+                raise ValueError("{} is not grid aligned or larger than the dataset".format(slc.stop))
+
+
     def _slice_to_chunks(self, slices, slc_idx):
         slc = slices[slc_idx]
         # susbstract the offset
@@ -199,18 +273,8 @@ class Precomputed(object):
         stop = slc.stop - voxel_offset
         chunk_size = self._scale['chunk_sizes'][0][slc_idx]
         layer_size = self._scale['size'][slc_idx]
-        if stop <= start:
-            raise ValueError(slc)
 
         if self.pad is None:
-            if start < 0:
-                raise ValueError(slc)
-
-            if start % chunk_size:
-                raise ValueError("{} is not grid aligned".format(slc.start))
-
-            if stop > layer_size or (stop < layer_size and stop % chunk_size):
-                raise ValueError("{} is not grid aligned or larger than the dataset".format(slc.stop))
             chunks = []
             for chunk_start in xrange(start, stop, chunk_size):
                 chunk_stop = min(chunk_start+chunk_size, layer_size)

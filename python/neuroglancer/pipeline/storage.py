@@ -101,24 +101,26 @@ class Storage(ThreadedQueue):
 
         return self
 
-    def get_file(self, file_path):
+    def get_file(self, file_path, force_decompress=False):
         # Create get_files does uses threading to speed up downloading
 
         content, decompress = self._interface.get_file(file_path)
-        if content and decompress != False:
+        if content and (decompress != False or force_decompress):
             content = self._maybe_uncompress(content)
         return content
 
-    def get_file_cached(self, file_path):
+    def get_file_cached(self, file_path, force_decompress=False):
         #TODO: check timestamp to see if cache is stale
         #TODO: clear the cache when it gets too large
-        if not hasattr(self,_cache):
+        if not hasattr(self,"_cache"):
             self._cache={}
+            self._cache_size=0
         if file_path not in self._cache:
-            self._cache[file_path] = self.get_file(file_path)
+            self._cache[file_path] = self.get_file(file_path, force_decompress)
+            self._cache_size += len(self._cache[file_path])
         return self._cache[file_path]
 
-    def get_files(self, file_paths):
+    def get_files(self, file_paths, force_decompress=False):
         """
         returns a list of files faster by using threads
         """
@@ -135,7 +137,7 @@ class Storage(ThreadedQueue):
                 print(err)
             
             content, decompress = result
-            if content and decompress:
+            if content and (decompress or force_decompress):
                 content = self._maybe_uncompress(content)
 
             results.append({
