@@ -5,6 +5,7 @@ import os.path
 import re
 from threading import Thread, Lock
 from functools import partial
+from backports.functools_lru_cache import lru_cache
 
 from glob import glob
 import google.cloud.exceptions
@@ -109,16 +110,18 @@ class Storage(ThreadedQueue):
             content = self._maybe_uncompress(content)
         return content
 
+    @lru_cache(maxsize=32)
     def get_file_cached(self, file_path, force_decompress=False):
         #TODO: check timestamp to see if cache is stale
         #TODO: clear the cache when it gets too large
-        if not hasattr(self,"_cache"):
-            self._cache={}
-            self._cache_size=0
-        if file_path not in self._cache:
-            self._cache[file_path] = self.get_file(file_path, force_decompress)
-            self._cache_size += len(self._cache[file_path])
-        return self._cache[file_path]
+        # if not hasattr(self,"_cache"):
+        #     self._cache={}
+        #     self._cache_size=0
+        # if file_path not in self._cache:
+        #     self._cache[file_path] = self.get_file(file_path, force_decompress)
+        #     self._cache_size += len(self._cache[file_path])
+        # return self._cache[file_path]
+        return self.get_file(file_path, force_decompress)
 
     def get_files(self, file_paths, force_decompress=False):
         """

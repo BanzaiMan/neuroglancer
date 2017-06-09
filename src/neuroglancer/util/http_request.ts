@@ -75,11 +75,11 @@ export function openShardedHttpRequest(baseUrls: string|string[], path: string, 
   return xhr;
 }
 
-export function sendHttpRequest(xhr: XMLHttpRequest, responseType: 'arraybuffer'): CancellablePromise<ArrayBuffer>;
-export function sendHttpRequest(xhr: XMLHttpRequest, responseType: 'json'): CancellablePromise<any>;
-export function sendHttpRequest(xhr: XMLHttpRequest, responseType: string): any;
+export function sendHttpRequest(xhr: XMLHttpRequest, responseType: 'arraybuffer', data?: string): CancellablePromise<ArrayBuffer>;
+export function sendHttpRequest(xhr: XMLHttpRequest, responseType: 'json', data?: string): CancellablePromise<any>;
+export function sendHttpRequest(xhr: XMLHttpRequest, responseType: string, data?: string): any;
 
-export function sendHttpRequest(xhr: XMLHttpRequest, responseType: string) {
+export function sendHttpRequest(xhr: XMLHttpRequest, responseType: string, data?: string) {
   xhr.responseType = <XMLHttpRequestResponseType>responseType;
   return makeCancellablePromise((resolve, reject, onCancel) => {
     xhr.onloadend = function(this: XMLHttpRequest) {
@@ -91,7 +91,7 @@ export function sendHttpRequest(xhr: XMLHttpRequest, responseType: string) {
       }
     };
     onCancel(() => { xhr.abort(); });
-    xhr.send();
+    xhr.send(data);
   });
 }
 

@@ -18,7 +18,7 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {LayerSelectedValues, UserLayer} from 'neuroglancer/layer';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
-import {forEachVisibleSegment, getObjectKey, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment2D, forEachVisibleSegment3D, getObjectKey, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {shareVisibility} from 'neuroglancer/shared_visibility_count/frontend';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -123,7 +123,9 @@ export function registerRedrawWhenSegmentationDisplayStateChanged(
   let dispatchRedrawNeeded = () => { renderLayer.redrawNeeded.dispatch(); };
   renderLayer.registerSignalBinding(
       displayState.segmentColorHash.changed.add(dispatchRedrawNeeded));
-  renderLayer.registerSignalBinding(displayState.visibleSegments.changed.add(dispatchRedrawNeeded));
+  renderLayer.registerSignalBinding(displayState.rootSegments.changed.add(dispatchRedrawNeeded));
+  renderLayer.registerSignalBinding(displayState.visibleSegments2D.changed.add(dispatchRedrawNeeded));
+  renderLayer.registerSignalBinding(displayState.visibleSegments3D.changed.add(dispatchRedrawNeeded));
   renderLayer.registerSignalBinding(
       displayState.segmentEquivalences.changed.add(dispatchRedrawNeeded));
   renderLayer.registerSignalBinding(
@@ -170,12 +172,26 @@ export function getObjectColor(
   return color;
 }
 
-export function forEachSegmentToDraw<SegmentData>(
+export function forEachSegmentToDraw2D<SegmentData>(
     displayState: SegmentationDisplayState, 
     objects: Map<string, SegmentData>,
     callback: (rootObjectId: Uint64, objectId: Uint64, segmentData: SegmentData) => void) {
 
-  forEachVisibleSegment(displayState, (objectId, rootObjectId) => {
+  forEachVisibleSegment2D(displayState, (objectId, rootObjectId) => {
+    const key = getObjectKey(objectId);
+    const segmentData = objects.get(key);
+    if (segmentData !== undefined) {
+      callback(rootObjectId, objectId, segmentData);
+    }
+  });
+}
+
+export function forEachSegmentToDraw3D<SegmentData>(
+    displayState: SegmentationDisplayState, 
+    objects: Map<string, SegmentData>,
+    callback: (rootObjectId: Uint64, objectId: Uint64, segmentData: SegmentData) => void) {
+
+  forEachVisibleSegment3D(displayState, (objectId, rootObjectId) => {
     const key = getObjectKey(objectId);
     const segmentData = objects.get(key);
     if (segmentData !== undefined) {
@@ -194,7 +210,9 @@ export class SegmentationLayerSharedObject extends SharedObject {
   initializeCounterpartWithChunkManager(options: any) {
     let {displayState} = this;
     options['chunkManager'] = this.chunkManager.rpcId;
-    options['visibleSegments'] = displayState.visibleSegments.rpcId;
+    options['rootSegments'] = displayState.rootSegments.rpcId;
+    options['visibleSegments2D'] = displayState.visibleSegments2D.rpcId;
+    options['visibleSegments3D'] = displayState.visibleSegments3D.rpcId;
     options['segmentEquivalences'] = displayState.segmentEquivalences.rpcId;
     super.initializeCounterpart(this.chunkManager.rpc!, options);
     shareVisibility(this);

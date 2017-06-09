@@ -227,7 +227,7 @@ export function handleChunkDownloadPromise<ChunkType extends Chunk, Result>(
         }
         chunk.cancelDownload = null;
         chunk.downloadFailed(e);
-        console.log(`Download failed for chunk ${chunk}`);
+        //console.log(`Download failed for chunk ${chunk}`);
       });
 }
 
