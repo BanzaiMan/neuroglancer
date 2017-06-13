@@ -22,6 +22,7 @@ from utils import *
 from loss_functions import *
 import dataset
 import augment
+import dataset_path
 
 
 class VectorLabelModel(Model):
@@ -30,7 +31,7 @@ class VectorLabelModel(Model):
 				 nvec_labels, maxn,
 				 devices, train_vols, test_vols, name=None):
 
-		self.name=name
+		self._name= name
 		self.summaries = []
 		self.devices = devices
 		self.patch_size = patch_size
@@ -53,10 +54,8 @@ class VectorLabelModel(Model):
 
 		def scv(sess,x):
 			placeholder = tf.placeholder(tf.as_dtype(x.dtype), shape=x.shape)
-			fd={}
-			fd[placeholder]=x
 			v=tf.Variable(placeholder,name="scv")
-			sess.run(tf.variables_initializer([v]),feed_dict=fd)
+			sess.run(tf.variables_initializer([v]),feed_dict={placeholder:x})
 			return v
 		
 		with tf.device("/cpu:0"):
@@ -190,16 +189,15 @@ class VectorLabelModel(Model):
 		pass
 
 TRAIN = dataset.MultiDataset(
-		[
-			os.path.expanduser("~/mydatasets/1_1_1/"),
-			os.path.expanduser("~/mydatasets/1_2_1/"),
-			os.path.expanduser("~/mydatasets/2_1_1/"),
-			os.path.expanduser("~/mydatasets/2_2_1/"),
-			os.path.expanduser("~/mydatasets/1_3_1/"),
-			os.path.expanduser("~/mydatasets/3_1_1/"),
-
-			os.path.expanduser("~/mydatasets/2_3_1/"),
-		],
+        [   
+            dataset_path.get_path("1_1_1"),
+            dataset_path.get_path("1_2_1"),
+            dataset_path.get_path("1_3_1"),
+            dataset_path.get_path("2_1_1"),
+            dataset_path.get_path("2_2_1"),
+            dataset_path.get_path("2_3_1"),
+            dataset_path.get_path("3_1_1"),
+        ],
 		{
 			"image": "image.h5",
 			"human_labels": "lzf_proofread.h5",

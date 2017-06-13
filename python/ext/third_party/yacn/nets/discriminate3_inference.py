@@ -23,16 +23,13 @@ import dataset
 #import pythonzenity
 
 class DiscrimModel(Model):
-	def __init__(self, patch_size, coverage, coverage_crop
-				 ):
+	def __init__(self, patch_size, coverage, coverage_crop):
 
 		self.summaries = []
 		self.patch_size = patch_size
 		self.padded_patch_size = (1,) + patch_size + (1,)
 		self.coverage = coverage
 		self.coverage_crop = coverage_crop
-
-		patchx,patchy,patchz = patch_size
 
 		config = tf.ConfigProto(
 			allow_soft_placement=True,
@@ -43,13 +40,11 @@ class DiscrimModel(Model):
 		self.run_metadata = tf.RunMetadata()
 
 		with tf.name_scope('params'):
-			self.step=tf.Variable(0)
-			discrim, reconstruct = discrim_net3.make_forward_net(patch_size,2,1)
-			self.discrim = discrim
+			self.step = tf.Variable(0)
+			self.discrim, reconstruct = discrim_net3.make_forward_net(patch_size,2,1)
 
 		#for some reason we need to initialize here first... Figure this out!
-		init = tf.global_variables_initializer()
-		self.sess.run(init)
+		self.sess.run(tf.global_variables_initializer())
 
 		self.ret_placeholder=tf.placeholder(dtype=tf.float32)
 		self.machine_labels_placeholder=tf.placeholder(dtype=tf.int32)
@@ -97,12 +92,11 @@ class DiscrimModel(Model):
 
 		self.full_array_initializer = tf.variables_initializer([self.ret,self.visited,self.machine_labels,self.image])
 
-		full_size = self.padded_patch_size
 		self.sess.run(self.full_array_initializer, feed_dict={
-			self.machine_labels_placeholder: np.zeros(full_size, dtype=np.int32), 
-			self.image_placeholder: np.zeros(full_size, dtype=np.float32), 
-			self.ret_placeholder: np.zeros(full_size,dtype=np.float32), 
-			self.visited_placeholder: np.zeros(full_size,dtype=np.int16)})
+			self.machine_labels_placeholder: np.zeros(self.padded_patch_size, dtype=np.int32), 
+			self.image_placeholder: np.zeros(self.padded_patch_size, dtype=np.float32), 
+			self.ret_placeholder: np.zeros(self.padded_patch_size,dtype=np.float32), 
+			self.visited_placeholder: np.zeros(self.padded_patch_size,dtype=np.int16)})
 
 
 		var_list = tf.get_collection(
@@ -171,8 +165,9 @@ args = {
 with tf.device("/cpu:0"):
 	main_model = DiscrimModel(**args)
 
-if __name__ == '__main__':
-	TRAIN = MultiDataset(
+
+def create_multidataset():
+	md = MultiDataset(
 			[
 				os.path.expanduser("~/mydatasets/3_3_1/"),
 				#os.path.expanduser("~/mydatasets/golden/"),
@@ -184,11 +179,19 @@ if __name__ == '__main__':
 				"image": "image.h5",
 			}
 	)
-	main_model.restore("~/experiments/discriminate3/latest.ckpt")
+	return md
 
-	dataset.h5write(os.path.join(TRAIN.directories[0], "errors.h5"), 
+def write_output(multidataset):
+	samples = multidataset.samples[0][0:10] # hack just for testing
+	dataset.h5write(os.path.join(multidataset.directories[0], "errors.h5"), 
 			np.squeeze(
 				main_model.inference(
-					TRAIN.image[0], TRAIN.machine_labels[0],
-					sample_generator = random_sample_generator(TRAIN.samples[0])),
+					multidataset.image[0], multidataset.machine_labels[0],
+					sample_generator = random_sample_generator(samples)),
 				axis=(0,4)))
+
+if __name__ == '__main__':
+
+	TRAIN = create_multidataset()
+	main_model.restore("~/experiments/discriminate3/latest.ckpt")
+	write_output(TRAIN)

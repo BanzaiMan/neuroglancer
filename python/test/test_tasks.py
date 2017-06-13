@@ -3,15 +3,10 @@ import shutil
 
 import numpy as np
 
-<<<<<<< 5f897ed1a3ae3d9ea2a02cb020f56a9d6749010d
-from neuroglancer.pipeline import Storage, Precomputed, DownsampleTask, MeshTask, WatershedTask
-from neuroglancer.pipeline.task_creation import create_downsampling_task, MockTaskQueue
-=======
 from neuroglancer.pipeline import Storage, Precomputed, DownsampleTask, MeshTask, RelabelTask
 from neuroglancer.pipeline.task_creation import (upload_build_chunks, create_info_file_from_build,
     create_ingest_task, MockTaskQueue, create_downsampling_task)
 
->>>>>>> feat(yacn): Adds stage1 ,stage2 and stage3 WIP
 from neuroglancer import downsample
 from test.test_precomputed import create_layer, delete_layer
 

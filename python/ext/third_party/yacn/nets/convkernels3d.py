@@ -173,19 +173,19 @@ class TransferConnection():
 
 FeatureSchema = namedtuple('FeatureSchema', ['nfeatures','level'])
 Connection3dSchema = namedtuple('Connection3dSchema', ['size', 'strides'])
-Connection2dSchema = namedtuple('Connection3dSchema', ['size', 'strides'])
+Connection2dSchema = namedtuple('Connection2dSchema', ['size', 'strides'])
 Connection3dFactorizedSchema = namedtuple('Connection3dFactorizedSchema', ['size', 'strides'])
 ConnectionTransferSchema = namedtuple('ConnectionTransferSchema',[])
 
 def strides3d(x):
-	if type(x)==Connection2dSchema:
+	if type(x) is Connection2dSchema:
 		return (1,) + x.strides
 	elif type(x) in [Connection3dSchema, Connection3dFactorizedSchema]:
 		return x.strides
 	assert False
 
 def size3d(x):
-	if type(x)==Connection2dSchema:
+	if type(x) is Connection2dSchema:
 		return (1,) + x.size
 	elif type(x) in [Connection3dSchema, Connection3dFactorizedSchema]:
 		return x.size
@@ -256,9 +256,11 @@ class MultiscaleDownConv3d():
 		return otpts
 
 class MultiscaleConv3d():
-	def __init__(self, inpt_schemas, otpt_schemas, diagonal_schemas, up_schemas, activations, transfer_schemas = itertools.repeat(ConnectionTransferSchema())):
-		n=len(inpt_schemas)
-		self.n=n
+	def __init__(self, inpt_schemas, otpt_schemas,
+		diagonal_schemas, up_schemas, activations,
+		transfer_schemas=itertools.repeat(ConnectionTransferSchema())):
+		n = len(inpt_schemas)
+		self.n = n
 		assert len(otpt_schemas) == n
 		transfer_schemas = [x for x in itertools.islice(transfer_schemas,n)]
 		self.diag_connections = [connection(inpt_schemas[i+1],otpt_schemas[i],diagonal_schemas[i]) for i in xrange(n-1)]

@@ -165,19 +165,25 @@ def label_loss_fun(vec_labels, human_labels, central_labels, central_labels_mask
 
 	return tf.reduce_sum(weight_matrix * cost) + tf.reduce_sum(tf.reshape(central_labels_mask,[-1,1]) * bounded_cross_entropy(affinity(vec_labels, centred_vec_labels),1)), predictions
 
-def error_free(obj, human_labels):
-	obj = tf.reshape(obj, [-1])
-	ind = tf.to_int32(tf.argmax(obj, axis=0))
+def error_free(single_object_machine_labels, human_labels):
+	"""Does the object have an error?
 
-	def A():
-		human_labels_reshape = tf.reshape(human_labels, [-1])
-		closest_obj=tf.to_float(tf.equal(human_labels_reshape, human_labels_reshape[ind]))
-		return tf.to_float(tf.reduce_all(tf.equal(obj,closest_obj)))
+	   If there is no error and 
 	
-	def B():
-		return 1-obj[ind]
+	Args:
+	    single_object_machine_labels (3d tensor): Values are either 1 or 0
+	    human_labels (3d tensor): Value are positive integers
+	"""
+	obj_flatten = tf.reshape(single_object_machine_labels, [-1])
+	human_labels_flatten = tf.reshape(human_labels, [-1])
 
-	return tf.maximum(A(),B())
+	obj_index = tf.to_int32(tf.argmax(obj_flatten, axis=0))
+	human_labels_id = human_labels_flatten[obj_index]
+
+	obj_human_labels = tf.to_float(tf.equal(human_labels_flatten, human_labels_id))
+	obj_prediction_error = tf.to_float(tf.reduce_all(tf.equal(obj_flatten,obj_human_labels)))
+
+	return tf.maximum(obj_prediction_error, 1-obj_flatten[obj_index])
 
 def has_error(obj, human_labels):
 	return 1-error_free(obj,human_labels)
@@ -199,11 +205,13 @@ def localized_errors_vectorized(obj, human_labels, ds_shape, expander):
 		tf.reduce_all(tf.equal(obj_reshape, tf.to_float(tf.equal(obj_label, human_labels_reshape))), axis=5, keep_dims = True))), squeeze_dims = [5])
 """
 
-#f is the function applied to the downsampling window
-def downsample(us, ds_shape, expander, f):
-	multi=(type(us)==type([]))
-	shape = ds_shape
-	if multi:
+def downsample(us, shape, expander, f):
+	"""
+	f is the function applied to the downsampling window
+	"""
+
+	if type(us) is list:
+		# we assume the shape of all components of the list is the same
 		full_shape = static_shape(us[0])
 	else:
 		full_shape = static_shape(us)
@@ -211,7 +219,9 @@ def downsample(us, ds_shape, expander, f):
 	inds = [[i,j,k] for i in xrange(0,shape[1]) for j in xrange(0,shape[2]) for k in xrange(0,shape[3])]
 	slices = [(slice(0,shape[0]),)+expander((slice(i,i+1), slice(j,j+1),slice(k,k+1))) + (slice(0,shape[4]),) for i,j,k in inds]
 
-	if multi:
+	for slc, ind in zip(slices, inds):
+		print (ind ,slc)
+	if type(us) is list:
 		array_form = tf.scatter_nd(indices=inds, updates=map(lambda x: f(*[V[x] for V in us]), slices), shape=shape[1:4])
 	else:
 		array_form = tf.scatter_nd(indices=inds, updates=map(lambda x: f(us[x]), slices), shape=shape[1:4])
