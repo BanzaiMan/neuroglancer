@@ -9,6 +9,7 @@ from collections import namedtuple
 import itertools
 from utils import *
 
+from yacn.kernels.graph_naming import tfscope, tfclass
 
 def make_variable(shape, val=0.0):
 	initial = tf.constant(val, dtype=dtype, shape=shape)
@@ -25,6 +26,7 @@ class ConvKernel():
 	def transpose(self):
 		return TransposeKernel(self)
 
+@tfclass
 class TransposeKernel(ConvKernel):
 	def __init__(self,k):
 		self.kernel=k
@@ -35,6 +37,7 @@ class TransposeKernel(ConvKernel):
 	def transpose(self):
 		return self.kernel
 
+@tfclass
 class ConvKernel2d(ConvKernel):
 	def __init__(self, size=(4,4), strides=(2,2), n_lower=1, n_upper=1,stddev=0.5):
 		initial = tf.truncated_normal([size[0],size[1],n_lower,n_upper], stddev=stddev, dtype=dtype)
@@ -50,12 +53,10 @@ class ConvKernel2d(ConvKernel):
 		return TransposeKernel(self)
 
 	def __call__(self,x):
-		with tf.name_scope('2d') as scope:
-			x=tf.squeeze(x,0)
-			tmp=tf.nn.conv2d(x,self.up_coeff*self.weights, strides=self.strides, padding='VALID')
-			shape_dict2d[(tuple(tmp._shape_as_list()[0:3]), self.size, tuple(self.strides))]=tuple(x._shape_as_list()[0:3])
-			tmp=tf.expand_dims(tmp,0)
-		return tmp
+		x=tf.squeeze(x,0)
+		conv =tf.nn.conv2d(x, self.up_coeff*self.weights, strides=self.strides, padding='VALID')
+		shape_dict2d[(tuple(conv._shape_as_list()[0:3]), self.size, tuple(self.strides))]=tuple(x._shape_as_list()[0:3])
+		return tf.expand_dims(conv,0)
 
 	def transpose_call(self,x):
 		with tf.name_scope('2d_t') as scope:
@@ -67,6 +68,7 @@ class ConvKernel2d(ConvKernel):
 
 		return ret
 
+@tfclass
 class ConvKernelZ(ConvKernel):
 	def __init__(self, size=2, n_lower=1, n_upper=1, stddev=0.5):
 		initial = tf.truncated_normal([size,1,n_lower,n_upper], stddev=stddev, dtype=dtype)
@@ -99,6 +101,7 @@ class ConvKernelZ(ConvKernel):
 			ret=tf.expand_dims(ret,0)
 		return ret
 
+@tfclass
 class ConvKernel3dFactorized_Old(ConvKernel):
 	def __init__(self, size=(2,4,4), strides=(1,2,2), n_lower=1, n_upper=1, n_mid=None):
 		self.size=size
@@ -113,6 +116,7 @@ class ConvKernel3dFactorized_Old(ConvKernel):
 	def transpose_call(self,x):
 		return self.kernel2d.transpose()(self.kernelz.transpose()(x))
 
+@tfclass
 class ConvKernel3d(ConvKernel):
 	def __init__(self, size=(1,4,4), strides=(1,2,2), n_lower=1, n_upper=1,stddev=0.5,dtype=dtype):
 		initial = tf.truncated_normal([size[0],size[1],size[2],n_lower,n_upper], stddev=stddev, dtype=dtype)
@@ -144,6 +148,7 @@ class ConvKernel3d(ConvKernel):
 
 		return ret
 
+@tfclass
 class ConvKernel3dFactorized(ConvKernel):
 	def __init__(self, size=(1,4,4), strides=(1,2,2), n_lower=1, n_mid=None, n_upper=1, stddev=0.5, dtype=dtype):
 		if n_mid is None:
@@ -214,6 +219,7 @@ def zero(schema):
 	else:
 		raise Exception()
 
+@tfclass
 class FullLinear():
 	def __init__(self, n_in, n_out,stddev=0.5,dtype=dtype):
 		self.n_in=n_in
@@ -226,6 +232,7 @@ class FullLinear():
 			n=len(static_shape(x))
 			return tf.matmul(x, tf.tile(tf.reshape(self.weights,[1]*(n-2) + [self.n_in, self.n_out]), static_shape(x)[0:n-2] + [1,1])) + tf.reshape(self.bias, [1]*(n-1) + [self.n_out])
 
+@tfclass
 class MultiscaleUpConv3d():
 	def __init__(self, feature_schemas, connection_schemas, activations):
 		n=len(feature_schemas)
@@ -240,7 +247,7 @@ class MultiscaleUpConv3d():
 				otpts.append(a(c(otpts[-1])+b))
 		return otpts
 
-
+@tfclass
 class MultiscaleDownConv3d():
 	def __init__(self, feature_schemas, connection_schemas, activations):
 		n=len(feature_schemas)
@@ -255,6 +262,7 @@ class MultiscaleDownConv3d():
 				otpts.insert(0,a(c(otpts[0])+b))
 		return otpts
 
+@tfclass
 class MultiscaleConv3d():
 	def __init__(self, inpt_schemas, otpt_schemas,
 		diagonal_schemas, up_schemas, activations,

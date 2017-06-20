@@ -165,31 +165,7 @@ def label_loss_fun(vec_labels, human_labels, central_labels, central_labels_mask
 
 	return tf.reduce_sum(weight_matrix * cost) + tf.reduce_sum(tf.reshape(central_labels_mask,[-1,1]) * bounded_cross_entropy(affinity(vec_labels, centred_vec_labels),1)), predictions
 
-def error_free(single_object_machine_labels, human_labels):
-	"""Does the object have an error?
 
-	   If there is no error and 
-	
-	Args:
-	    single_object_machine_labels (3d tensor): Values are either 1 or 0
-	    human_labels (3d tensor): Value are positive integers
-	"""
-	obj_flatten = tf.reshape(single_object_machine_labels, [-1])
-	human_labels_flatten = tf.reshape(human_labels, [-1])
-
-	obj_index = tf.to_int32(tf.argmax(obj_flatten, axis=0))
-	human_labels_id = human_labels_flatten[obj_index]
-
-	obj_human_labels = tf.to_float(tf.equal(human_labels_flatten, human_labels_id))
-	obj_prediction_error = tf.to_float(tf.reduce_all(tf.equal(obj_flatten,obj_human_labels)))
-
-	return tf.maximum(obj_prediction_error, 1-obj_flatten[obj_index])
-
-def has_error(obj, human_labels):
-	return 1-error_free(obj,human_labels)
-
-def localized_errors(obj, human_labels, ds_shape, expander):
-	return 1-(downsample([obj,human_labels], ds_shape, expander, error_free))
 
 """
 #obj should be zero-one

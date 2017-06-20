@@ -3,6 +3,7 @@ from convkernels3d import *
 from activations import *
 from utils import *
 from . import Estimator
+from yacn.kernels.graph_naming import tfclass
 
 initial_activations = [
     lambda x: x,
@@ -41,6 +42,7 @@ def patch_size_suggestions(top_shape):
     print(patch_size_suggestions)
     return patch_size_suggestions
 
+@tfclass
 class ErrorDetectionEstimator(Estimator):
     """
     Create two networks which shares all their weights
@@ -99,38 +101,36 @@ class ErrorDetectionEstimator(Estimator):
         self._apply_linears = lambda tower: [f(x) for f,x in zip(linears, tower)]
 
     def error_prediction(self, x):
-        with tf.name_scope("error_prediction"):
-            padded_x = tf.concat([x,tf.zeros((1,) + self._patch_size + (self._n_out,))],4)
-            return compose(
-                    self._initial,
-                    self._it1,
-                    self._it2,
-                    self._ds_it1,
-                    self._ds_it2,
-                    self._apply_linears
-                    )(padded_x)
+        padded_x = tf.concat([x,tf.zeros((1,) + self._patch_size + (self._n_out,))],4)
+        return compose(
+                self._initial,
+                self._it1,
+                self._it2,
+                self._ds_it1,
+                self._ds_it2,
+                self._apply_linears
+                )(padded_x)
 
     def segment_completion(self, _input):
         """
         The input is a single occluded object concatenated to 
         electron microscopy image.
         """
-        with tf.name_scope("segment_reconstruction"):
-            padded_input = tf.concat([_input, 
-                tf.zeros((1,) + self._patch_size + (self._n_out,))],4)
-            return compose(
-                    self._initial,
-                    self._it1,
-                    self._it2,
+        padded_input = tf.concat([_input, 
+            tf.zeros((1,) + self._patch_size + (self._n_out,))],4)
+        return compose(
+                self._initial,
+                self._it1,
+                self._it2,
 
-                    self._ds_it1,
-                    self._ds_it2,
-                    self._ds_it1,
-                    self._ds_it2,
+                self._ds_it1,
+                self._ds_it2,
+                self._ds_it1,
+                self._ds_it2,
 
-                    self._it3,
-                    self._it4,
-                    self._it5)(padded_input)[0][:,:,:,:, self._n_in: self._n_in+self._n_out] #what is this indexing?
+                self._it3,
+                self._it4,
+                self._it5)(padded_input)[0][:,:,:,:, self._n_in: self._n_in+self._n_out] #what is this indexing?
 
 
 if __name__ == '__main__':

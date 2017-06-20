@@ -38,8 +38,8 @@ class Model():
         """
         t = time.time()
         is_train_iter = i % test_interval != 0 
-        step=self.sess.run(self.step)
-        if i == -1:
+        step = self.sess.run(self.step)
+        if i == -1 or False:
             _, quick_summary = self.sess.run(
                     [self.iter_op, self.quick_summary_op], 
                     options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE), 
@@ -47,10 +47,10 @@ class Model():
                     feed_dict={self.is_train_iter: is_train_iter})
 
             trace = timeline.Timeline(step_stats=self.run_metadata.step_stats)
-            trace_file = open('timeline.ctf.json', 'w')
-            trace_file.write(trace.generate_chrome_trace_format())
-            trace_file.flush()
-            trace_file.close()
+            with  open('timeline.ctf.json', 'w') as f:
+                f.write(trace.generate_chrome_trace_format(show_memory=True, show_dataflow=True))
+            self.summary_writer.add_run_metadata(self.run_metadata, 'step%d' % i)
+
         else:
 
             _, quick_summary = self.sess.run(
@@ -58,7 +58,7 @@ class Model():
 
         elapsed = time.time() - t
         print("elapsed: ", elapsed)
-        self.summary_writer.add_summary(quick_summary, step)
+        # self.summary_writer.add_summary(quick_summary, step)
         if i % checkpoint_interval == 0:
             print("checkpointing...")
             self.saver.save(self.sess, self.logdir + "model" + str(step) + ".ckpt", write_meta_graph=False)
@@ -86,42 +86,6 @@ class Model():
             logdir, graph=self.sess.graph)
         print ('log initialized')
 
-class Volume():
-    def __init__(self, A, patch_size,indexing='CENTRAL'):
-        self.A=A
-        self.patch_size=patch_size
-        self.indexing=indexing
-
-    def __getitem__(self, focus):
-        A=self.A
-        patch_size=self.patch_size
-        with tf.device("/cpu:0"):
-            if type(focus)==tuple:
-                focus = list(focus)
-                for i,s in enumerate(static_shape(A)):
-                    if focus[i] == 'RAND':
-                        focus[i] = tf.random_uniform([],minval=0, maxval=s,dtype=tf.int32)
-
-            if self.indexing == 'CENTRAL':
-                corner = focus - np.array([x/2 for x in patch_size],dtype=np.int32)
-            elif self.indexing =='CORNER':
-                corner = focus
-            else:
-                raise Exception("bad indexing scheme")
-            return tf.stop_gradient(tf.slice(A,corner,patch_size))
-
-    def __setitem__(self, focus, val):
-        A=self.A
-        patch_size=self.patch_size
-        with tf.device("/cpu:0"):
-            if self.indexing == 'CENTRAL':
-                corner = focus - np.array([x/2 for x in patch_size],dtype=np.int32)
-            elif self.indexing =='CORNER':
-                corner = focus
-            else:
-                raise Exception("bad indexing scheme")
-            corner = tf.unstack(corner)
-            return tf.stop_gradient(A[tuple([slice(corner[i],corner[i]+patch_size[i]) for i in xrange(len(patch_size))])].assign(val))
     
 class NpVolume():
     def __init__(self, A, patch_size,indexing='CENTRAL'):
@@ -147,60 +111,11 @@ class NpVolume():
     def __setitem__(self, focus, val):
         self.A[self.focus_to_slices(focus)] = val
 
-class MultiVolume():
-    def __init__(self, As, patch_size, indexing = 'CENTRAL'):
-        self.As=map(lambda A: Volume(A,patch_size,indexing=indexing),As)
-        self.patch_size = patch_size
-    
-    def __getitem__(self, index):
-        vol_index, focus = index
-
-        def focus_factory(i):
-            def f():
-                #return tf.Print(self.As[i][focus],[i])
-                return self.As[i][focus]
-            return f
-
-        return tf.reshape(tf.case([(tf.equal(vol_index,i), focus_factory(i)) for i in xrange(len(self.As))], default=lambda: tf.Print(self.As[0][focus],[vol_index],message="volume not found"), exclusive=True), self.patch_size)
-
-#differs from MultiVolume in that indexing is standard
-class MultiTensor():
-    def __init__(self, As):
-        self.As = As
-    def __getitem__(self, index):
-        def focus_factory(i):
-            def f():
-                #return tf.Print(self.As[i],[self.As[i]], summarize=10)
-                return self.As[i]
-            return f
-
-        return tf.case([(tf.equal(index,i), focus_factory(i)) for i in xrange(len(self.As))], default=lambda: tf.Print(tf.identity(self.As[0]), [i], message="tensor not found"), exclusive=True)
-            
-
-def static_constant_multivolume(sess, l ,*args,**kwargs):
-    """
-    tries to reuse placeholder
-    consumes l
-    """
-
-    with tf.name_scope("static_constant_multivolume"):
-        variables=[]
-        placeholder = tf.placeholder(tf.as_dtype(l[0].dtype), shape=l[0].shape)
-        for i in xrange(len(l)):
-            v = tf.Variable(
-                placeholder, name="volume",
-                trainable=False)
-            variables.append(v)
-            sess.run(tf.variables_initializer([v]), feed_dict={ placeholder: l[i] })
-            l[i]=None
-            gc.collect()
-
-        return MultiVolume(variables,*args,**kwargs) 
 
 class EMA():
     def __init__(self,decay):
         self.decay=decay
-        self.val = tf.Variable(0.0)
+        self.val = tf.Variable(0.0, trainable=False)
     
     def update(self,x):
         with tf.control_dependencies([self.val.assign(self.val*self.decay + x*(1-self.decay))]):
@@ -436,17 +351,6 @@ def cum_compose(*fs):
 
 def reduce_spatial(x):
     return tf.reduce_sum(x, axis=[1,2,3], keep_dims=False)
-
-def get_available_gpus():
-    local_device_protos = device_lib.list_local_devices()
-    return [x.name for x in local_device_protos if x.device_type == 'GPU']
-
-def get_device_list():
-    gpus = get_available_gpus()
-    if len(gpus) > 0:
-        return gpus
-    else:
-        return ["/cpu:0"]
 
 def range_expander(stride, size):
     def f(t):
