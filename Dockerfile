@@ -55,7 +55,7 @@ RUN pip install tensorflow-gpu gitpython pandas
 # install contact_analysis dependencies
 RUN echo "push!(LOAD_PATH, \"/neuroglancer/python/ext/third_party/contact_analysis\")" > /root/.juliarc.jl
 RUN cd /neuroglancer/python/ext/third_party/contact_analysis/ && \
-  julia -e "Pkg.update(); for f in readlines(open(\"REQUIRE\")); Pkg.add(strip(f)); end"
+  julia -e "Pkg.update(); Pkg.resolve();"
 
 CMD cd /neuroglancer/python/ && python -m neuroglancer.pipeline.task_execution
 
