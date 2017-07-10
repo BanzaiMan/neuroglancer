@@ -53,9 +53,9 @@ RUN cd /neuroglancer/python/ext/third_party/yacn/ && \
 RUN pip install tensorflow-gpu gitpython pandas
 
 # install contact_analysis dependencies
-RUN printf "push!(LOAD_PATH, \"/neuroglancer/python/ext/third_party/contact_analysis/src\")\nENV[\"USER\"] = \"docker\"\nusing JSON\nfor (k,v) in JSON.parse(open(\"/secrets/aws-secret.json\"))\n  ENV[k] = v\nend" > /root/.juliarc.jl
 RUN cd /neuroglancer/python/ext/third_party/contact_analysis/ && \
   julia -e "Pkg.update(); for f in readlines(open(\"REQUIRE\")); Pkg.add(strip(f)); end"
+RUN printf "push!(LOAD_PATH, \"/neuroglancer/python/ext/third_party/contact_analysis/src\")\nENV[\"USER\"] = \"docker\"\nusing JSON\nfor (k,v) in JSON.parse(open(\"/secrets/aws-secret.json\"))\n  ENV[k] = v\nend" > /root/.juliarc.jl
 
 CMD cd /neuroglancer/python/ && python -m neuroglancer.pipeline.task_execution
 
