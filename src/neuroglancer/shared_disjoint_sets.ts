@@ -22,10 +22,12 @@ import {Signal} from 'signals';
 
 const RPC_TYPE_ID = 'DisjointUint64Sets';
 const ADD_METHOD_ID = 'DisjointUint64Sets.add';
-const REMOVE_METHOD_ID = 'DisjointUint64Sets.remove';
 const DELETE_SET_METHOD_ID = 'DisjointUint64Sets.deleteSet';
 const SPLIT_METHOD_ID = 'DisjointUint64Sets.split';
 const CLEAR_METHOD_ID = 'DisjointUint64Sets.clear';
+
+const tempA = new Uint64();
+const tempB = new Uint64();
 
 @registerSharedObject(RPC_TYPE_ID)
 export class SharedDisjointUint64Sets extends SharedObjectCounterpart {
@@ -44,25 +46,29 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart {
     super.disposed();
   }
 
-  link(a: Uint64, b: Uint64) {
-    if (this.disjointSets.link(a, b)) {
+  link_(a: Uint64, b: Uint64 | Uint64[]) {
+    if (b.constructor === Array) {
+      let changed = false;
+      for (const v of <Uint64[]>b) {
+        tempB.high = v.high;
+        tempB.low = v.low;
+        changed = this.disjointSets.link(a, tempB) || changed;
+      }
+      return changed;
+    } else {
+      tempB.high = (<Uint64>b).high;
+      tempB.low = (<Uint64>b).low;
+      return this.disjointSets.link(a, tempB);
+    }
+  }
+
+  link(a: Uint64, b: Uint64 | Uint64[]) {
+    if (this.link_(a, b)) {
       let {rpc} = this;
       if (rpc) {
         rpc.invoke(
             ADD_METHOD_ID,
-            {'id': this.rpcId, 'al': a.low, 'ah': a.high, 'bl': b.low, 'bh': b.high});
-      }
-      this.changed.dispatch();
-    }
-  }
-
-  unlink (a: Uint64) {
-    if (this.disjointSets.unlink(a)) {
-      let {rpc} = this;
-      if (rpc) {
-        rpc.invoke(
-            REMOVE_METHOD_ID,
-            {'id': this.rpcId, 'al': a.low, 'ah': a.high});
+            {'id': this.rpcId, 'a': a, 'b': b});
       }
       this.changed.dispatch();
     }
@@ -142,26 +148,11 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart {
   }
 };
 
-const tempA = new Uint64();
-const tempB = new Uint64();
-
 registerRPC(ADD_METHOD_ID, function(x) {
   let obj = <SharedDisjointUint64Sets>this.get(x['id']);
-  tempA.low = x['al'];
-  tempA.high = x['ah'];
-  tempB.low = x['bl'];
-  tempB.high = x['bh'];
-  if (obj.disjointSets.link(tempA, tempB)) {
-    obj.changed.dispatch();
-  }
-});
-
-registerRPC(REMOVE_METHOD_ID, function(x) {
-  let obj = <SharedDisjointUint64Sets>this.get(x['id']);
-  tempA.low = x['al'];
-  tempA.high = x['ah'];
-
-  if (obj.disjointSets.unlink(tempA)) {
+  tempA.low = x['a'].low;
+  tempA.high = x['a'].high;
+  if (obj.link_(tempA, x['b'])) {
     obj.changed.dispatch();
   }
 });

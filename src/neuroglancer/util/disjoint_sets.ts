@@ -150,38 +150,6 @@ export class DisjointUint64Sets {
     return true;
   }
 
-  unlink (a: Uint64): boolean {
-    let key = a.toString();
-    let element = this.map.get(key);
-
-    if (!element || ((<any>element)[parentSymbol] === element)) {
-      return true;
-    }
-
-    let nodes = this.shatter(element);
-
-    if (nodes[0] === element) {
-      nodes.shift();
-    }
-
-    if (nodes.length === 0) {
-      return false;
-    }
-
-    let is_ok = true;
-
-    if (nodes.length > 1) {
-      nodes.forEach( (x) => {
-        if (x !== element) {
-          let this_is_ok = this.link(nodes[0], x);
-          is_ok = is_ok && this_is_ok;
-        }
-      });
-    }
-
-    return is_ok;
-  }
-
   deleteSet (a: Uint64): boolean {
     const ids = [...this.setElements(a)];
     if (ids.length > 0) {

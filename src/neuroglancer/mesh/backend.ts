@@ -336,17 +336,18 @@ class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
             console.log("Adding 3D children aborted due to missing root.");
             return;
           }
-          for (let childId of children) {
-            this.visibleSegments3D.add(childId);
-            if (segmentID.high != objectId.high || segmentID.low != objectId.low) {
-              console.log(`Error: OrgObjectID is ${segmentID}, before linking it's already ${objectId}!`)
-            }
-            this.segmentEquivalences.link(segmentID, childId);
-            if (segmentID.high != objectId.high || segmentID.low != objectId.low) {
-              console.log(`Error: OrgObjectID was ${segmentID}, after linking it's ${objectId}!`)
-            }
-          };
+
+          this.visibleSegments3D.add(children);
+
+          if (segmentID.high != objectId.high || segmentID.low != objectId.low) {
+            console.log(`Error: OrgObjectID is ${segmentID}, before linking it's already ${objectId}!`)
+          }
+          this.segmentEquivalences.link(segmentID, children);
+          if (segmentID.high != objectId.high || segmentID.low != objectId.low) {
+            console.log(`Error: OrgObjectID was ${segmentID}, after linking it's ${objectId}!`)
+          }
           this.visibleSegments3D.delete(segmentID);
+          
         });
       }
     });

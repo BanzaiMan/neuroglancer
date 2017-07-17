@@ -30,6 +30,7 @@ import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 const selectedSegmentForShader = new Float32Array(8);
+const DEBUG = true;
 
 export class EquivalencesHashMap {
   generation = Number.NaN;
@@ -43,6 +44,10 @@ export class EquivalencesHashMap {
       this.generation = generation;
       let {hashMap} = this;
       hashMap.clear();
+      if (DEBUG === true) {
+        console.log(`Reserving ${Math.ceil(1.5 * disjointSets.size)} elements for equivalence map`);
+      }
+      hashMap.reserve(Math.ceil(1.5 * disjointSets.size));
 
       for (let [objectId, minObjectId] of disjointSets.mappings()) {
         hashMap.set(objectId, minObjectId);
