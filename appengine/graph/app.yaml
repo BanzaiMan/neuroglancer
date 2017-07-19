@@ -1,0 +1,26 @@
+runtime: python
+env: flex
+
+runtime_config:
+    python_version: 3
+
+api_version: 1
+threadsafe: true
+service: graph
+instance_class: B8
+manual_scaling:
+  instances: 1
+# The skip_files element specifies which files
+# in the application directory are not to be 
+# uploaded to App Engine.
+skip_files:
+- ^(.*/)?#.*#$
+- ^(.*/)?.*~$
+- ^(.*/)?.*\.py[co]$
+- ^(.*/)?.*/RCS/.*$
+- ^(.*/)?\..*$
+- ^node_modules$
+
+handlers:  
+- url: /(.*)
+  script: graph.app
